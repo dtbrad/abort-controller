@@ -1,28 +1,43 @@
-import React, { Component } from 'react';
-import logo from './logo.svg';
-import './App.css';
+import React from "react";
+import {connect} from "react-redux";
+import {blurInput, changeInput} from './input';
 
-class App extends Component {
-  render() {
-    return (
-      <div className="App">
-        <header className="App-header">
-          <img src={logo} className="App-logo" alt="logo" />
-          <p>
-            Edit <code>src/App.js</code> and save to reload.
-          </p>
-          <a
-            className="App-link"
-            href="https://reactjs.org"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Learn React
-          </a>
-        </header>
-      </div>
-    );
-  }
+function mapStateToProps(state) {
+    return {
+        isLoading: state.isLoading,
+        valid: state.valid,
+        value: state.value
+    };
 }
 
-export default App;
+const mapDispatchToProps = {
+    blurInput,
+    changeInput
+};
+
+function App ({isLoading, valid, blurInput, changeInput}) {
+    function validationMessage (valid) {
+        switch(valid) {
+            case true:
+                return 'valid';
+            case false:
+                return 'invalid'
+            default:
+                return 'not yet validated'
+        }
+    }
+
+    return (
+        <div>
+            <h3>The only correct value is 'a'</h3>
+            <p>{validationMessage(valid)}</p>
+            <input
+                onChange={(e) => changeInput(e.target.value)}
+                onBlur={() => blurInput()}
+            />
+            {isLoading ? <p>Loading...</p> : null}
+        </div>
+    )
+}
+
+export default connect(mapStateToProps, mapDispatchToProps)(App);
