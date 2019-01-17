@@ -1,6 +1,7 @@
 import debounce from 'lodash/debounce';
 
 const Promise = require("bluebird");
+const DID_FOCUS_INPUT = 'DID_FOCUS_INPUT';
 const DID_BEGIN_LOADING = 'DID_BEGIN_LOADING';
 const DID_END_LOADING = 'DID_END_LOADING';
 const DID_CHANGE_INPUT = 'DID_CHANGE_INPUT';
@@ -19,7 +20,7 @@ let controller;
 let signal;
 
 function fetchOptions (value, signal) {
-    const validationQueryUrl = `http://localhost:3001/words?value=${value}`
+    const validationQueryUrl = `http://localhost:3001/words?q=${value}`
     return fetch(validationQueryUrl, {signal})
         .then(function(response) {
             return response.json()
@@ -28,10 +29,7 @@ function fetchOptions (value, signal) {
 
 function validateInput(state) {
     const {value, options} = state;
-    const filteredOptions = options && options.filter(
-            (option) => option.value.toLowerCase().includes(value.toLowerCase())
-        );
-    const valid = filteredOptions && !!filteredOptions.length;
+    const valid = options && !!(options.find((option) => option.value === value));
     return {
         type: DID_VALIDATE_INPUT, valid
     }
@@ -55,7 +53,7 @@ const debouncedChangeInput = debounce(
                 if (valid === false || blurredTooFast) {
                     return dispatch (validateInput(state))
                     }
-                })
+            })
             .then(() => dispatch({type: DID_END_LOADING, value: false}))
             .catch((e) => dispatch({type: DID_CANCEL_FETCH}))
     },
@@ -72,7 +70,7 @@ export function changeInput(value) {
     }
 }
 
-export function blurInput () {
+export function blurInput() {
     return function (dispatch, getState) {
         const state = getState();
         const {isLoading} = state;
@@ -85,8 +83,18 @@ export function blurInput () {
     }
 }
 
+export function focusInput() {
+    console.log('did focus');
+    return {type: DID_FOCUS_INPUT};
+}
+
 export default function reducer (state = initialState, action) {
     switch (action.type) {
+        case DID_FOCUS_INPUT:
+            return {
+                ...state,
+                blurredTooFast: false
+            }
         case DID_BEGIN_LOADING:
         case DID_END_LOADING:
             return {

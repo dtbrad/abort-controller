@@ -1,10 +1,12 @@
 import React from "react";
 import {connect} from "react-redux";
-import {blurInput, changeInput} from './input';
+import {blurInput, changeInput, focusInput} from './input';
 
 function mapStateToProps(state) {
     return {
+        blurredTooFast: state.blurredTooFast,
         isLoading: state.isLoading,
+        options: state.options,
         valid: state.valid,
         value: state.value
     };
@@ -12,10 +14,11 @@ function mapStateToProps(state) {
 
 const mapDispatchToProps = {
     blurInput,
-    changeInput
+    changeInput,
+    focusInput
 };
 
-function App ({isLoading, valid, blurInput, changeInput}) {
+function App ({blurredTooFast, isLoading, valid, value, options, blurInput, changeInput, focusInput}) {
     function validationMessage (valid) {
         switch(valid) {
             case true:
@@ -29,14 +32,20 @@ function App ({isLoading, valid, blurInput, changeInput}) {
 
     return (
         <div>
-            <h3>The only correct value is 'a'</h3>
+            <h3>The correct values are 'apple', 'car', 'cart', and 'zebra</h3>
             <p>{validationMessage(valid)}</p>
             <input
+                onFocus={() => focusInput()}
                 onChange={(e) => changeInput(e.target.value)}
                 onBlur={() => blurInput()}
             />
             {isLoading ? <p>Loading...</p> : null}
+            <hr/>
+            <div>
+                <pre>{JSON.stringify({blurredTooFast, value, isLoading, valid, options}, null, 3)}</pre>
+            </div>
         </div>
+
     )
 }
 
