@@ -8,20 +8,20 @@ const DID_CHANGE_INPUT = 'DID_CHANGE_INPUT';
 const DID_BLUR_BEFORE_FETCH_COMPLETED = 'DID_BLUR_BEFORE_FETCH_COMPLETED';
 const DID_VALIDATE_INPUT = 'DID_VALIDATE_INPUT';
 const DID_CANCEL_FETCH = 'DID_CANCEL_FETCH';
+const WILL_START_CHANGE = 'WILL_START_CHANGE_WITH_FETCH';
+const DID_START_DEBOUNCED_CHANGE = 'DID_START_DEBOUNCED_CHANGE_WITH_FETCH';
+const DID_END_DEBOUNCED_CHANGE = 'DID_END_DEBOUNCED_CHANGE';
 
 const initialState = {
-    blurredTooFast: false,
-    isLoading: false,
+    pendingDebounceDuration: false,
+    numberOfPendingDebouncedChanges: 0,
     value: "",
     valid: null
 }
 
-let controller;
-let signal;
-
-function fetchOptions (value, signal) {
+function fetchOptions (value) {
     const validationQueryUrl = `http://localhost:3001/words?q=${value}`
-    return fetch(validationQueryUrl, {signal})
+    return fetch(validationQueryUrl)
         .then(function(response) {
             return response.json()
         })
@@ -37,15 +37,9 @@ function validateInput(state) {
 
 const debouncedChangeInput = debounce(
     function changeInputBase(value, getState, dispatch) {
-        if (controller) {
-            controller.abort();
-        }
-
-        controller = new AbortController();
-        ({signal} = controller);
-
         return Promise
-            .try(() => fetchOptions(value, signal))
+            .try(() => dispatch({type: DID_START_DEBOUNCED_CHANGE}))
+            .then(() => fetchOptions(value))
             .then((options) => dispatch({type: DID_CHANGE_INPUT, value, options}))
             .then(function () {
                 const state = getState();
@@ -54,28 +48,26 @@ const debouncedChangeInput = debounce(
                     return dispatch (validateInput(state))
                     }
             })
-            .then(() => dispatch({type: DID_END_LOADING, value: false}))
             .catch((e) => dispatch({type: DID_CANCEL_FETCH}))
+            .finally(() => dispatch({type: DID_END_DEBOUNCED_CHANGE}));
     },
     300
 )
 
 export function changeInput(value) {
     return function (dispatch, getState) {
-        const state = getState();
-        const isLoading = state.isLoading;
         return Promise
-            .try(() => !isLoading && dispatch({type: DID_BEGIN_LOADING, value: true}))
-            .then(() => debouncedChangeInput(value, getState, dispatch))
+            .try(() => dispatch({type: WILL_START_CHANGE}))
+              .then(() => debouncedChangeInput(value, getState, dispatch))
     }
 }
 
 export function blurInput() {
     return function (dispatch, getState) {
         const state = getState();
-        const {isLoading} = state;
+        const {pendingDebounceDuration, numberOfPendingDebouncedChanges} = state;
 
-        if (isLoading === false) {
+        if (!pendingDebounceDuration && numberOfPendingDebouncedChanges === 0) {
             return dispatch(validateInput(state));
         }
 
@@ -84,7 +76,6 @@ export function blurInput() {
 }
 
 export function focusInput() {
-    console.log('did focus');
     return {type: DID_FOCUS_INPUT};
 }
 
@@ -95,14 +86,28 @@ export default function reducer (state = initialState, action) {
                 ...state,
                 blurredTooFast: false
             }
-        case DID_BEGIN_LOADING:
-        case DID_END_LOADING:
+        
+        case WILL_START_CHANGE:
             return {
                 ...state,
-                isLoading: action.value
+                pendingDebounceDuration: true
+            }
+        
+        case DID_START_DEBOUNCED_CHANGE:
+            return {
+                ...state,
+                pendingDebounceDuration: false,
+                numberOfPendingDebouncedChanges: state.numberOfPendingDebouncedChanges + 1
             }
 
+        case DID_END_DEBOUNCED_CHANGE:
+            return {
+                ...state,
+                    numberOfPendingDebouncedChanges: state.numberOfPendingDebouncedChanges - 1
+            }
+    
         case DID_CHANGE_INPUT:
+            console.log(`changing ${state.value} to ${action.value}`)
             return {
                 ...state,
                 value: action.value,
