@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "bluebird": "^3.5.3",
+    "concurrently": "^4.1.0",
     "lodash.debounce": "^4.0.8",
     "react": "^16.7.0",
     "react-dom": "^16.7.0",
@@ -13,7 +14,7 @@
     "redux-thunk": "^2.3.0"
   },
   "scripts": {
-    "start": "react-scripts start",
+    "start": "concurrently \"react-scripts start\" \"json-server --watch --delay 1000 db.json --port 3001\" \"json-server --watch --delay 500 db.json --port 3002\"",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"

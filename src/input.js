@@ -2,12 +2,12 @@ import debounce from 'lodash/debounce';
 
 const Promise = require("bluebird");
 const DID_FOCUS_INPUT = 'DID_FOCUS_INPUT';
-const DID_BEGIN_LOADING = 'DID_BEGIN_LOADING';
-const DID_END_LOADING = 'DID_END_LOADING';
 const DID_CHANGE_INPUT = 'DID_CHANGE_INPUT';
+const DID_NOT_CHANGE_STALE_VALUE = 'DID_NOT_CHANGE_STALE_VALUE';
 const DID_BLUR_BEFORE_FETCH_COMPLETED = 'DID_BLUR_BEFORE_FETCH_COMPLETED';
+const WILL_VALIDATE_ON_CHANGE = 'WILL_VALIDATE_ON_CHANGE';
+const WILL_VALIDATE_ON_BLUR = 'WILL_VALIDATE_ON_BLUR';
 const DID_VALIDATE_INPUT = 'DID_VALIDATE_INPUT';
-const DID_CANCEL_FETCH = 'DID_CANCEL_FETCH';
 const WILL_START_CHANGE = 'WILL_START_CHANGE_WITH_FETCH';
 const DID_START_DEBOUNCED_CHANGE = 'DID_START_DEBOUNCED_CHANGE_WITH_FETCH';
 const DID_END_DEBOUNCED_CHANGE = 'DID_END_DEBOUNCED_CHANGE';
@@ -19,9 +19,16 @@ const initialState = {
     valid: null
 }
 
+// fake backend configured on two ports to mimic slow and fast responses
 function fetchOptions (value) {
-    const validationQueryUrl = `http://localhost:3001/words?q=${value}`
-    return fetch(validationQueryUrl)
+    const fastUrl = `http://localhost:3001/words` // 1000ms
+    const slowUrl = `http://localhost:3002/words` // 500ms
+
+    const queryUrl = value === 'az'
+        ? `${fastUrl}?q=${value}`
+        : `${slowUrl}?q=${value}`;
+
+    return fetch(queryUrl)
         .then(function(response) {
             return response.json()
         })
@@ -37,18 +44,27 @@ function validateInput(state) {
 
 const debouncedChangeInput = debounce(
     function changeInputBase(value, getState, dispatch) {
+        let state;
         return Promise
             .try(() => dispatch({type: DID_START_DEBOUNCED_CHANGE}))
             .then(() => fetchOptions(value))
-            .then((options) => dispatch({type: DID_CHANGE_INPUT, value, options}))
+            .then(function (options) {
+                state = getState();
+                const currentInputValue = state.value;
+                if (currentInputValue === value) {
+                    return dispatch({type: DID_CHANGE_INPUT, value, options});
+                }
+                return dispatch({type: DID_NOT_CHANGE_STALE_VALUE})
+            })
             .then(function () {
                 const state = getState();
                 const {blurredTooFast, valid} = state;
                 if (valid === false || blurredTooFast) {
+                    dispatch({type: WILL_VALIDATE_ON_CHANGE});
                     return dispatch (validateInput(state))
                     }
             })
-            .catch((e) => dispatch({type: DID_CANCEL_FETCH}))
+            .catch((e) => dispatch({type: 'error', e}))
             .finally(() => dispatch({type: DID_END_DEBOUNCED_CHANGE}));
     },
     300
@@ -57,7 +73,7 @@ const debouncedChangeInput = debounce(
 export function changeInput(value) {
     return function (dispatch, getState) {
         return Promise
-            .try(() => dispatch({type: WILL_START_CHANGE}))
+            .try(() => dispatch({type: WILL_START_CHANGE, value}))
               .then(() => debouncedChangeInput(value, getState, dispatch))
     }
 }
@@ -68,10 +84,13 @@ export function blurInput() {
         const {pendingDebounceDuration, numberOfPendingDebouncedChanges} = state;
 
         if (!pendingDebounceDuration && numberOfPendingDebouncedChanges === 0) {
+            dispatch({type: WILL_VALIDATE_ON_BLUR})
             return dispatch(validateInput(state));
         }
 
-        return dispatch({type: DID_BLUR_BEFORE_FETCH_COMPLETED, value: true});
+        return Promise
+            .try(() => dispatch({type: DID_BLUR_BEFORE_FETCH_COMPLETED, value: true}))
+            .then(() => debouncedChangeInput.flush());
     }
 }
 
@@ -90,7 +109,8 @@ export default function reducer (state = initialState, action) {
         case WILL_START_CHANGE:
             return {
                 ...state,
-                pendingDebounceDuration: true
+                pendingDebounceDuration: true,
+                value: action.value
             }
         
         case DID_START_DEBOUNCED_CHANGE:
@@ -107,7 +127,6 @@ export default function reducer (state = initialState, action) {
             }
     
         case DID_CHANGE_INPUT:
-            console.log(`changing ${state.value} to ${action.value}`)
             return {
                 ...state,
                 value: action.value,
